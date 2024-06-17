@@ -26,7 +26,7 @@ typedef int float_type;
 
 // converte x to integer, arredondando para zero
 // nao sei se esse aqui funciona
-#define FLOAT_INT_ZERO(x) ((int) (x >> FLOAT_SHIFT_AMOUNT)
+#define FLOAT_INT_ZERO(x) (int) (x >> FLOAT_SHIFT_AMOUNT)
 // talvez trocar por isso, na doc ta assim
 // #define FLOAT_INT_ZERO(x) ((int) (x / F)
 // round de float

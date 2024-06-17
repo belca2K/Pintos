@@ -100,12 +100,16 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+    int64_t sleep_ticks;
+    int iteration;
   };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+static struct list block_list;
 
 void thread_init (void);
 void thread_start (void);
@@ -137,5 +141,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+bool Reord (const struct list_elem *a, const struct list_elem *b, void *aux);
+void thread_yield_block(void);
 
 #endif /* threads/thread.h */

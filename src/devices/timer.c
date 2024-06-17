@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+#include "list.h"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -84,16 +85,28 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
-timer_sleep (int64_t ticks) 
+timer_sleep (int64_t ticks_) 
 {
   int64_t start = timer_ticks ();
+  
+  if(ticks_ <= 0){
+    return;
+  }
 
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+  //while (timer_elapsed (start) < ticks) 
+    //thread_yield ();
+  struct thread* t = thread_current();
+  
+  t->sleep_ticks = ticks_ + start;
+  printf("---- start: %lld | %lld | %lld\n", start, ticks_, t->sleep_ticks);
+
+  thread_yield_block();
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be

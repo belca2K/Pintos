@@ -81,6 +81,9 @@ list_begin (struct list *list)
 struct list_elem *
 list_next (struct list_elem *elem)
 {
+  if(is_tail(elem)){
+    return NULL;
+  }
   ASSERT (is_head (elem) || is_interior (elem));
   return elem->next;
 }
@@ -162,7 +165,7 @@ list_tail (struct list *list)
   return &list->tail;
 }
 
-/* Inserts ELEM just before BEFORE, which may be either an
+/* Inserts ELEM just beFore BEFORE, which may be either an
    interior element or a tail.  The latter case is equivalent to
    list_push_back(). */
 void

@@ -318,14 +318,18 @@ thread_yield (void)
 void
 thread_yield_2 (void) 
 {
-  struct thread *cur = thread_current ();
-  enum intr_level old_level;
+    struct thread *cur = thread_current ();
+    enum intr_level old_level;
   
-  ASSERT (!intr_context ());
+    ASSERT (!intr_context ());
 
-  old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    old_level = intr_disable ();
+
+  //aparentemente a gnt só precisa mexer nesse if
+  if (cur != idle_thread){//list_push_back (&ready_list, &cur->elem);
+    //list_insert_ordered();
+  }
+
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);

@@ -102,7 +102,7 @@ timer_sleep (int64_t ticks)
   if(timer_elapsed(start) > ticks) thread_sleep((start+ticks)); //ql q é essa viagem(?)
 }
 
-
+//É o brunaaaaao
 
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be

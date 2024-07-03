@@ -1,30 +1,22 @@
 include ../Makefile.kernel
 
-# os testes de mlfqs nao funciona pois da alfum erro que nao consegui contornar
-TEST=alarm-multiple
+TEST ?= alarm-multiple
+# flags de comandos para ele funcionar com o mlfqs
+FLAGS = -q 
+TIMEOUT = 60
+PINTOS_RELATIVE_PATH= ../utils/pintos
+BUILD_PATH = build/tests/threads
+ifeq ($(findstring mlfqs, $(TEST)), mlfqs)
+# se for passado um teste de mlfqs ele deve adicionar uma flag e mudar o tempo de timeout
+    FLAGS += -mlfqs
+	TIMEOUT = 480
+endif
 
-gui:	
-# sem teste com comparação
-# ../utils/pintos $(SIMULATOR) -- run alarm-multiple
-# aparentemente funcionando, mas nao acreditar 100%
-	
-	@if [ ! -d build ]; then \
-		echo "Dando build"; \
-		$(MAKE) all; \
-	fi
-		
-	../utils/pintos -k -T 60 $(SIMULATOR) -- -q run $(TEST) < /dev/null 2> build/tests/threads/$(TEST).errors > build/tests/threads/$(TEST).output
-	perl -I../ ../tests/threads/$(TEST).ck build/tests/threads/$(TEST) build/test/threads/$(TEST).result
-ngui:
-# ../utils/pintos -v -k -T 60 $(SIMULATOR) -- run alarm-multiple 
-# basicamente se nao tiver dado buidl ele da comando de build	
-	@if [ ! -d build ]; then \
-		echo "Dando build"; \
-		$(MAKE) all; \
-	fi
+test:
+# primeiro da clean e build e depois ele roda o teste em si
+	$(MAKE) clean; 
+	$(MAKE) all; 
 
-	../utils/pintos -v -k -T 60 $(SIMULATOR) -- -q run $(TEST) < /dev/null 2> build/tests/threads/$(TEST).errors > build/tests/threads/$(TEST).output
-	perl -I../ ../tests/threads/$(TEST).ck build/tests/threads/$(TEST) build/test/threads/
-
-# ../../utils/pintos -v -k -T 60 --qemu  -- -q  run alarm-multiple < /dev/null 2> tests/threads/alarm-multiple.errors > tests/threads/alarm-multiple.output
-# perl -I../.. ../../tests/threads/alarm-multiple.ck tests/threads/alarm-multiple tests/threads/alarm-multiple.result
+# ../utils/pintos -v -k -T 60 $(SIMULATOR) -- run (TEST)
+	$(PINTOS_RELATIVE_PATH) -v -k -T $(TIMEOUT) $(SIMULATOR) -- $(FLAGS) run $(TEST) < /dev/null 2> $(BUILD_PATH)/$(TEST).errors > $(BUILD_PATH)/$(TEST).output
+	perl -I../ ../tests/threads/$(TEST).ck $(BUILD_PATH)/$(TEST) $(BUILD_PATH)/

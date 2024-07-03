@@ -453,10 +453,7 @@ list_insert_ordered (struct list *list, struct list_elem *elem,
   ASSERT (less != NULL);
 
   for (e = list_begin (list); e != list_end (list); e = list_next (e))
-    if (less (elem, e, aux))    //o que esse 'list_less_func' faz??
-                                // R-compara o valor do elemento ao valor que vai ser inserido
-                                //basicamente,quando 'e' não for maior que elem, ele para para inserir o 'e'
-                                //na posição já sorteada
+    if (less (elem, e, aux))
       break;
   return list_insert (e, elem);
 }

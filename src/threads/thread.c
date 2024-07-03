@@ -4,6 +4,7 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include "devices/timer.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -24,6 +25,9 @@
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
+
+/*Lista de todos os processos que estão dormindo*/
+static struct list sleeping_list;
 
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
@@ -71,6 +75,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+bool wakeup_cmp(const struct list_elem *a, const struct list_elem *b, void *aux);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -92,6 +97,7 @@ thread_init (void)
 
   lock_init (&tid_lock);
   list_init (&ready_list);
+  list_init(&sleeping_list); //iniciando a lista adicionada
   list_init (&all_list);
 
   /* Set up a thread structure for the running thread. */
@@ -238,7 +244,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered (&ready_list, &t->elem, cmp_priority, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -309,29 +315,70 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered (&ready_list, &cur->elem, cmp_priority, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
 }
 
-void
-thread_yield_2 (void) 
+/* Compara as threads com base no wakeup_ticks. Compara esses ticks
+  para inserir ordenadamente as threads de acordo com seus wakeup_ticks.
+  Retorna True caso o wakeup_tick de A seja menor que o wakeup_tick de B. */
+bool
+wakeup_cmp (const struct list_elem *a, const struct list_elem *b, void *aux)
 {
-    struct thread *cur = thread_current ();
-    enum intr_level old_level;
+  struct thread *ta, *tb; 
+
+  ta = list_entry (a, struct thread, elem);
+  tb = list_entry (b, struct thread, elem);
   
-    ASSERT (!intr_context ());
+  return thread_get_wakeup_tick(ta) < thread_get_wakeup_tick(tb);
+}
 
-    old_level = intr_disable ();
+/* Suspende a execução da thread até que o tick atual ser igual 
+ao wakeup_tick da thread. A thread é colocada na lista de threads suspensas(sleeping_list)
+ordenadamente de acordo com o wakeup_tick. */
+void
+thread_sleep (int64_t wakeup_tick) 
+{
+  struct thread *cur = thread_current ();
+  enum intr_level old_level;
 
-  //aparentemente a gnt só precisa mexer nesse if
-  if (cur != idle_thread){//list_push_back (&ready_list, &cur->elem);
-    //list_insert_ordered();
-  }
+  ASSERT (!intr_context ());
 
-  cur->status = THREAD_READY;
+  old_level = intr_disable ();
+  if (cur != idle_thread)
+    {
+      thread_set_wakeup_tick (cur, wakeup_tick);
+      list_insert_ordered (&sleeping_list, &cur->elem, wakeup_cmp, NULL);
+    }
+  cur->status = THREAD_BLOCKED;
   schedule ();
+  intr_set_level (old_level);
+}
+
+/*  Acorda as threads que possuem wakeup_tick menor que o tick atual
+    e as move para a lista de threads prontas para execução (ready_list). Essa função
+    é chamada periodicamente pelo tratador de interrupção (timer_interrupt_handler) */
+void
+thread_wakeup (void)
+{
+  struct list_elem *e = list_begin (&sleeping_list);
+  enum intr_level old_level;
+
+  old_level = intr_disable ();
+  while (e != list_end (&sleeping_list))
+    {
+      struct thread *t = list_entry (e, struct thread, elem);
+      e = list_next (e);
+
+      if (timer_ticks () < thread_get_wakeup_tick (t))
+        break;
+
+      list_remove (&t->elem);
+      list_push_back (&ready_list, &t->elem);
+      t->status = THREAD_READY;
+    }
   intr_set_level (old_level);
 }
 
@@ -364,6 +411,20 @@ int
 thread_get_priority (void) 
 {
   return thread_current ()->priority;
+}
+
+/* Insere o valor do wakeup_tick */
+void
+thread_set_wakeup_tick (struct thread *t, int64_t wakeup_tick)
+{
+  t->wakeup_tick = wakeup_tick;
+}
+
+/* retorna o valor do wakeup_tick da thread */
+int64_t
+thread_get_wakeup_tick (struct thread *t)
+{
+  return t->wakeup_tick;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -483,10 +544,11 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->wakeup_tick = 0; //iniciando wakeup_tick 
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
-  list_push_back (&all_list, &t->allelem);
+  list_insert_ordered (&all_list, &t->allelem, cmp_priority, NULL);
   intr_set_level (old_level);
 }
 
@@ -603,6 +665,12 @@ allocate_tid (void)
   lock_release (&tid_lock);
 
   return tid;
+}
+
+bool cmp_priority(const struct list_elem *t1, const struct list_elem *t2, void *aux) {
+  struct thread *T1 = list_entry(t1, struct thread, elem);
+  struct thread *T2 = list_entry(t2, struct thread, elem);
+  return (T1->priority) > (T2->priority); 
 }
 
 /* Offset of `stack' member within `struct thread'.

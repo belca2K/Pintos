@@ -94,7 +94,20 @@ não precisa nem no `make check` do src/threads/build (se der algum erro oque fo
    
    Reimplementar `timer_sleep()` no `device/time.c` que ta originalmente implementado com 'busy wait', que fica chamando `thread_yield()` enquanto o tempo não tiver passado;
    - Ideia:
-   `Implementar um estado bloqueado para auxiliar e permitir corrigir o alarme`
+   `Implementar um estado bloqueado para auxiliar e permitir corrigir o alarme.`
+   - thread->wakeup_tick:
+   `Variável que guarda o valor de tick que indica que a thread deve estar acordada (desbloqueada).`
+   - thread_sleep():
+   `Tiramos a espera ocupada e trocamos por um estado bloqueado de threads (sleep).`
+   - wakeup_cmp():
+   `Compara o valor entre o wakeup_tick das duas threads.`
+   - thread_sleep():
+   `Bloqueia as threads que não devem estar sendo executadas.`
+   - thread_wakeup():
+   `Desbloqueia as threads que devem estar sendo executadas.`
+
+
+   
 
 </details>
 <details>
@@ -136,12 +149,12 @@ não precisa nem no `make check` do src/threads/build (se der algum erro oque fo
    
    | # | Teste | Implementada | Testada | Funcionando |
    |---|-----------|:-----------:|:-------:|:-----------:|
-   | 1  | `alarm-single`|      ❌     |    ❌    |      ❌      |
-   | 2  | `alarm-multiple`|      ❌     |    ❌    |      ❌      |
-   | 3  | `alarm-simultaneous`|      ❌     |    ❌    |      ❌      |
+   | 1  | `alarm-single`|      OK     |    OK    |      OK      |
+   | 2  | `alarm-multiple`|      OK     |    OK    |      OK      |
+   | 3  | `alarm-simultaneous`|      OK     |    OK    |      OK      |
    | 4  | `alarm-priority`*|      ❌     |    ❌    |      ❌      |
-   | 5  | `alarm-zero`|      ❌     |    ❌    |      ❌      |
-   | 6  | `alarm-negative`|      ❌     |    ❌    |      ❌      |
+   | 5  | `alarm-zero`|      OK     |    OK    |      OK      |
+   | 6  | `alarm-negative`|      OK     |    OK    |      OK      |
    | 7  | `priority-change`*|      ❌     |    ❌    |      ❌      |
    | 8  | `priority-donate-one`*|      ❌     |    ❌    |      ❌      |
    | 9  | `priority-donate-multiple`*|      ❌     |    ❌    |      ❌      |

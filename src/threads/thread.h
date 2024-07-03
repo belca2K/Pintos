@@ -88,6 +88,7 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    int64_t wakeup_tick;                /* Wakeup_tick. */
     struct list_elem allelem;           /* List element for all threads list. */
 
     /* Shared between thread.c and synch.c. */
@@ -126,6 +127,12 @@ const char *thread_name (void);
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 
+/* funções adicionadas
+   thread_sleep é uma função que coloca a thread para dormir caso o tick seja menor que o wakeup_tick
+   thread_wakeup é uma função que acorda a thread caso o tick seja maior que o wakeup_tick           */
+void thread_sleep (int64_t wakeup_tick);
+void thread_wakeup (void);
+
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
@@ -133,9 +140,15 @@ void thread_foreach (thread_action_func *, void *);
 int thread_get_priority (void);
 void thread_set_priority (int);
 
+int64_t thread_get_wakeup_tick (struct thread *t);
+void thread_set_wakeup_tick (struct thread *t, int64_t wakeup_tick);
+
 int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+bool cmp_priority(const struct list_elem *t1, const struct list_elem *t2, void *aux);
+
 
 #endif /* threads/thread.h */

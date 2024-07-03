@@ -344,7 +344,7 @@ thread_sleep (int64_t wakeup_tick)
   struct thread *cur = thread_current ();
   enum intr_level old_level;
 
-  ASSERT (!intr_context ());
+  ASSERT (!intr_context ()); //verifica se não está em contexto de interrupção
 
   old_level = intr_disable ();
   if (cur != idle_thread)
@@ -369,14 +369,14 @@ thread_wakeup (void)
   old_level = intr_disable ();
   while (e != list_end (&sleeping_list))
     {
-      struct thread *t = list_entry (e, struct thread, elem);
-      e = list_next (e);
+      struct thread *t = list_entry (e, struct thread, elem); //armazena o valor a ser analisado antes de pegar o próximo elemento
+      e = list_next (e); //iterador do laço
 
-      if (timer_ticks () < thread_get_wakeup_tick (t))
-        break;
+      if (timer_ticks () < thread_get_wakeup_tick (t)) // se o timer_ticks for menor, sair do laço, pois, como a lista tá ordenada,
+        break;                                         // nenhum elemento terá o wakeup-tick menor que o tick atual.
 
       list_remove (&t->elem);
-      list_push_back (&ready_list, &t->elem);
+      list_push_back (&ready_list, &t->elem); //depois trocar isso aqui por list_insert_ordered(cmp_priority)
       t->status = THREAD_READY;
     }
   intr_set_level (old_level);

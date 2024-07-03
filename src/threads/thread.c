@@ -16,6 +16,8 @@
 #include "userprog/process.h"
 #endif
 
+#include "threads/fixed-point.h" //(NOVO) inclui o arquivo operations.h
+
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
@@ -64,6 +66,8 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
+int64_t load_avg;// (NOVO) média de carga do sistema 
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -95,6 +99,7 @@ thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
+  load_avg = 0; //(NOVO) inicializa load_avg
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init(&sleeping_list); //iniciando a lista adicionada
@@ -105,6 +110,8 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->nice = 0;       // (NOVO) Inicializa o atributo nice da thread.
+  initial_thread->recent_cpu = 0; // (NOVO) Inicializa o atributo recent_cpu da thread.
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -207,6 +214,8 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  thread_yield(); // (NOVO) Chama a função thread_yield para verificar se a
+                  // thread criada tem prioridade maior que a thread atual.
 
   return tid;
 }
@@ -244,7 +253,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, cmp_priority, NULL); //trocamos push_back por insert_ordered
+  list_insert_ordered (&ready_list, &t->elem, unblock_ordenator, NULL); //trocamos push_back por insert_ordered
                                                                    //já que precisa inserir ordenadamente
                                                                    //de acordo com a prioridade de cada thread
   t->status = THREAD_READY;
@@ -317,70 +326,9 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_insert_ordered (&ready_list, &cur->elem, cmp_priority, NULL);
+    list_insert_ordered (&ready_list, &cur->elem, unblock_ordenator, NULL);
   cur->status = THREAD_READY;
   schedule ();
-  intr_set_level (old_level);
-}
-
-/* Compara as threads com base no wakeup_ticks. Compara esses ticks
-  para inserir ordenadamente as threads de acordo com seus wakeup_ticks.
-  Retorna True caso o wakeup_tick de A seja menor que o wakeup_tick de B. */
-bool
-cmp_wakeup (const struct list_elem *a, const struct list_elem *b, void *aux)
-{
-  struct thread *ta, *tb; 
-
-  ta = list_entry (a, struct thread, elem);
-  tb = list_entry (b, struct thread, elem);
-  
-  return thread_get_wakeup_tick(ta) < thread_get_wakeup_tick(tb);
-}
-
-/* Suspende a execução da thread até que o tick atual ser igual 
-ao wakeup_tick da thread. A thread é colocada na lista de threads suspensas(sleeping_list)
-ordenadamente de acordo com o wakeup_tick. */
-void
-thread_sleep (int64_t wakeup_tick) 
-{
-  struct thread *cur = thread_current ();
-  enum intr_level old_level;
-
-  ASSERT (!intr_context ()); //verifica se não está em contexto de interrupção
-
-  old_level = intr_disable ();
-  if (cur != idle_thread)
-    {
-      thread_set_wakeup_tick (cur, wakeup_tick);
-      list_insert_ordered (&sleeping_list, &cur->elem, cmp_wakeup, NULL);
-    }
-  cur->status = THREAD_BLOCKED;
-  schedule ();
-  intr_set_level (old_level);
-}
-
-/*  Acorda as threads que possuem wakeup_tick menor que o tick atual
-    e as move para a lista de threads prontas para execução (ready_list). Essa função
-    é chamada periodicamente pelo tratador de interrupção (timer_interrupt_handler) */
-void
-thread_wakeup (void)
-{
-  struct list_elem *e = list_begin (&sleeping_list);
-  enum intr_level old_level;
-
-  old_level = intr_disable ();
-  while (e != list_end (&sleeping_list))
-    {
-      struct thread *t = list_entry (e, struct thread, elem); //armazena o valor a ser analisado antes de pegar o próximo elemento
-      e = list_next (e); //iterador do laço
-
-      if (timer_ticks () < thread_get_wakeup_tick (t)) // se o timer_ticks for menor, sair do laço, pois, como a lista tá ordenada,
-        break;                                         // nenhum elemento terá o wakeup-tick menor que o tick atual.
-
-      list_remove (&t->elem);
-      list_push_back (&ready_list, &t->elem); //depois trocar isso aqui por list_insert_ordered(cmp_priority)
-      t->status = THREAD_READY;
-    }
   intr_set_level (old_level);
 }
 
@@ -406,6 +354,8 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  thread_yield();    // (NOVO) Chama a função thread_yield para verificar se a
+                     // thread atual tem prioridade maior que a thread criada.
 }
 
 /* Returns the current thread's priority. */
@@ -433,31 +383,37 @@ thread_get_wakeup_tick (struct thread *t)
 void
 thread_set_nice (int nice UNUSED) 
 {
-  /* Not yet implemented. */
+  struct thread *t = thread_current();
+  t->nice = nice;
+  int priority = FLOAT_TO_INT_ZERO(FLOAT_ADD(FLOAT_DIV_MIX(t->recent_cpu,-4) ,INT_TO_FLOAT(PRI_MAX - (t->nice* 2))));
+    priority = priority_limit_check (priority); // Verifica se a prioridade está dentro do limite.
+    t->priority = priority_limit_check(priority); // Atribui o valor de priority para o atributo priority.
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  struct thread *t = thread_current();
+  return t->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  int load_avg_value = FLOAT_TO_INT_ZERO(FLOAT_MULT_MIX(load_avg, 100)); // (NOVO) Pega o valor de load average atual. 
+   
+  return load_avg_value; // (NOVO) retorna 100 vezes o valor de load average atual
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  int recent = FLOAT_TO_INT_ZERO(FLOAT_MULT_MIX(thread_current ()->recent_cpu, 100)); // (NOVO) Pega o valor de recent_cpu da thread atual.
+    
+  return recent; // (NOVO) retorna 100 vezes o valor de recent_cpu da thread atual
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -546,11 +502,13 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
-  t->wakeup_tick = 0; //iniciando wakeup_tick 
+  t->wakeup_tick = 0; // iniciando wakeup_tick 
   t->magic = THREAD_MAGIC;
+  t->recent_cpu = 0; // (NOVO) Inicializa o atributo nice da thread.
+  t->nice = 0;       // (NOVO) Inicializa o atributo recent_cpu da thread.
 
   old_level = intr_disable ();
-  list_insert_ordered (&all_list, &t->allelem, cmp_priority, NULL);
+  list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
 }
 
@@ -669,11 +627,85 @@ allocate_tid (void)
   return tid;
 }
 
-bool cmp_priority(const struct list_elem *t1, const struct list_elem *t2, void *aux) {
-  struct thread *T1 = list_entry(t1, struct thread, elem);
-  struct thread *T2 = list_entry(t2, struct thread, elem);
-  return (T1->priority) < (T2->priority); 
+/* Compara as threads com base no wakeup_ticks. Compara esses ticks
+  para inserir ordenadamente as threads de acordo com seus wakeup_ticks.
+  Retorna True caso o wakeup_tick de A seja menor que o wakeup_tick de B. */
+bool
+block_ordenator(const struct list_elem *a, const struct list_elem *b, void *aux)
+{
+  struct thread *ta, *tb; 
+
+  ta = list_entry (a, struct thread, elem);
+  tb = list_entry (b, struct thread, elem);
+  
+  return thread_get_wakeup_tick(ta) < thread_get_wakeup_tick(tb);
 }
+
+bool unblock_ordenator(const struct list_elem *a, const struct list_elem *b, void *aux) {
+  struct thread *ta = list_entry(a, struct thread, elem);
+  struct thread *tb = list_entry(b, struct thread, elem);
+  return (ta->priority) < (tb->priority); 
+}
+/* Suspende a execução da thread até que o tick atual ser igual 
+ao wakeup_tick da thread. A thread é colocada na lista de threads suspensas(sleeping_list)
+ordenadamente de acordo com o wakeup_tick. */
+void
+thread_sleep (int64_t wakeup_tick) 
+{
+  struct thread *cur = thread_current ();
+  enum intr_level old_level;
+
+  ASSERT (!intr_context ()); //verifica se não está em contexto de interrupção
+
+  old_level = intr_disable ();
+  if (cur != idle_thread)
+    {
+      thread_set_wakeup_tick (cur, wakeup_tick);
+      list_insert_ordered (&sleeping_list, &cur->elem, block_ordenator, NULL);
+    }
+  cur->status = THREAD_BLOCKED;
+  schedule ();
+  intr_set_level (old_level);
+}
+
+/*  Acorda as threads que possuem wakeup_tick menor que o tick atual
+    e as move para a lista de threads prontas para execução (ready_list). Essa função
+    é chamada periodicamente pelo tratador de interrupção (timer_interrupt_handler) */
+void
+thread_wakeup (void)
+{
+  struct list_elem *e = list_begin (&sleeping_list);
+  enum intr_level old_level;
+
+  old_level = intr_disable ();
+  while (e != list_end (&sleeping_list))
+    {
+      struct thread *t = list_entry (e, struct thread, elem); //armazena o valor a ser analisado antes de pegar o próximo elemento
+      e = list_next (e); //iterador do laço
+
+      if (timer_ticks () < thread_get_wakeup_tick (t)) // se o timer_ticks for menor, sair do laço, pois, como a lista tá ordenada,
+        break;                                         // nenhum elemento terá o wakeup-tick menor que o tick atual.
+
+      list_remove (&t->elem);
+      list_push_back (&ready_list, &t->elem); //depois trocar isso aqui por list_insert_ordered(cmp_priority)
+      t->status = THREAD_READY;
+    }
+  intr_set_level (old_level);
+}
+
+int64_t
+priority_limit_check(int64_t priority)
+// (NOVO) Função que verifica se a prioridade está dentro do limite.
+{ 
+  if(priority > PRI_MAX){
+    priority = PRI_MAX;
+  }
+  else if(priority < PRI_MIN){
+    priority = PRI_MIN;
+  }
+  return priority;
+}
+
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */

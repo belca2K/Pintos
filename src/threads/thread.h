@@ -90,7 +90,9 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
-    int64_t wakeup_tick;                /* Wakeup_tick. */
+    int64_t wakeup_tick;   /* (NOVO) tick para acordar uma thread bloqueada. */
+    int nice;              /* (NOVO) grau de quao nicer eh uma thread*/
+    int recent_cpu;         /* (NOVO) tempo de cpu recente */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -128,15 +130,6 @@ const char *thread_name (void);
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 
-/* funções adicionadas */
-//wakeup_cmp compara os wakeup_ticks de cada thread e retorna true caso tick_a < tick_b, e falso caso contrário
-bool cmp_wakeup (const struct list_elem *a, const struct list_elem *b, void *aux);
-//thread_sleep é uma função que coloca a thread para dormir caso o tick seja menor que o wakeup_tick
-void thread_sleep (int64_t wakeup_tick);
-//thread_wakeup é uma função que acorda a thread caso o tick seja maior que o wakeup_tick  
-void thread_wakeup (void);
-//comparador de prioridades, caso a prioridade de prio_T1 seja menor que prio_T2 retorna true, e falso caso contrário
-bool cmp_priority(const struct list_elem *t1, const struct list_elem *t2, void *aux);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
@@ -153,5 +146,14 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+
+/* funções adicionadas */
+//thread_sleep é uma função que coloca a thread para dormir caso o tick seja menor que o wakeup_tick
+void thread_sleep (int64_t wakeup_tick);
+//thread_wakeup é uma função que acorda a thread caso o tick seja maior que o wakeup_tick  
+void thread_wakeup (void);
+bool block_ordenator (const struct list_elem *a, const struct list_elem *b, void *aux);
+bool unblock_ordenator(const struct list_elem *a, const struct list_elem *b, void *aux);
+int64_t priority_limit_check(int64_t priority);
 
 #endif /* threads/thread.h */

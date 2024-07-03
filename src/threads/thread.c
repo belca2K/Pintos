@@ -75,7 +75,7 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-bool wakeup_cmp(const struct list_elem *a, const struct list_elem *b, void *aux);
+bool cmp_wakeup(const struct list_elem *a, const struct list_elem *b, void *aux);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -244,7 +244,9 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered (&ready_list, &t->elem, cmp_priority, NULL);
+  list_insert_ordered (&ready_list, &t->elem, cmp_priority, NULL); //trocamos push_back por insert_ordered
+                                                                   //já que precisa inserir ordenadamente
+                                                                   //de acordo com a prioridade de cada thread
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -325,7 +327,7 @@ thread_yield (void)
   para inserir ordenadamente as threads de acordo com seus wakeup_ticks.
   Retorna True caso o wakeup_tick de A seja menor que o wakeup_tick de B. */
 bool
-wakeup_cmp (const struct list_elem *a, const struct list_elem *b, void *aux)
+cmp_wakeup (const struct list_elem *a, const struct list_elem *b, void *aux)
 {
   struct thread *ta, *tb; 
 
@@ -350,7 +352,7 @@ thread_sleep (int64_t wakeup_tick)
   if (cur != idle_thread)
     {
       thread_set_wakeup_tick (cur, wakeup_tick);
-      list_insert_ordered (&sleeping_list, &cur->elem, wakeup_cmp, NULL);
+      list_insert_ordered (&sleeping_list, &cur->elem, cmp_wakeup, NULL);
     }
   cur->status = THREAD_BLOCKED;
   schedule ();
@@ -670,7 +672,7 @@ allocate_tid (void)
 bool cmp_priority(const struct list_elem *t1, const struct list_elem *t2, void *aux) {
   struct thread *T1 = list_entry(t1, struct thread, elem);
   struct thread *T2 = list_entry(t2, struct thread, elem);
-  return (T1->priority) > (T2->priority); 
+  return (T1->priority) < (T2->priority); 
 }
 
 /* Offset of `stack' member within `struct thread'.

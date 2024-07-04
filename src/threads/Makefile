@@ -9,7 +9,7 @@ BUILD_PATH = build/tests/threads
 ifeq ($(findstring mlfqs, $(TEST)), mlfqs)
 # se for passado um teste de mlfqs ele deve adicionar uma flag e mudar o tempo de timeout
     FLAGS += -mlfqs
-	TIMEOUT = 480
+	TIMEOUT = 60
 endif
 
 test:

@@ -164,6 +164,11 @@ thread_tick (void)
     if(timer_ticks() % 4 == 0) //(NOVO) verifica se o valor do timer_ticks é múltipĺo de 4
     {
       update_priority_all();
+      enum intr_level old_level;
+      
+      old_level = intr_disable();
+      list_sort(&ready_list, unblock_ordenator, NULL);
+      intr_set_level(old_level);
     }
   }
   /* Enforce preemption. */

@@ -80,7 +80,6 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-bool cmp_wakeup(const struct list_elem *a, const struct list_elem *b, void *aux);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -359,8 +358,7 @@ thread_foreach (thread_action_func *func, void *aux)
 
   ASSERT (intr_get_level () == INTR_OFF);
 
-  for (e = list_begin (&all_list); e != list_end (&all_list);
-       e = list_next (e))
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e))
     {
       struct thread *t = list_entry (e, struct thread, allelem);
       func (t, aux);
@@ -371,9 +369,6 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
-  thread_yield();    // (NOVO) Chama a função thread_yield para verificar se a
-                     // thread atual tem prioridade maior que a thread criada.
   if(!thread_mlfqs)
   {
     struct thread *t = thread_current(); 
@@ -674,7 +669,7 @@ block_ordenator(const struct list_elem *a, const struct list_elem *b, void *aux)
 bool unblock_ordenator(const struct list_elem *a, const struct list_elem *b, void *aux) {
   struct thread *ta = list_entry(a, struct thread, elem);
   struct thread *tb = list_entry(b, struct thread, elem);
-  return (ta->priority) < (tb->priority); 
+  return (ta->priority) > (tb->priority); 
 }
 /* Suspende a execução da thread até que o tick atual ser igual 
 ao wakeup_tick da thread. A thread é colocada na lista de threads suspensas(sleeping_list)

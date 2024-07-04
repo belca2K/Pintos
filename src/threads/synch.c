@@ -233,6 +233,9 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+
+  // Desbloquea as threads que estão à espera de um lock		
+	thread_yield();
 }
 
 /* Returns true if the current thread holds LOCK, false

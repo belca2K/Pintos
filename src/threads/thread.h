@@ -155,5 +155,9 @@ void thread_wakeup (void);
 bool block_ordenator (const struct list_elem *a, const struct list_elem *b, void *aux);
 bool unblock_ordenator(const struct list_elem *a, const struct list_elem *b, void *aux);
 int64_t priority_limit_check(int64_t priority);
+void update_priority_all(void);
+void update_recent_all(void);
+void update_load_avg(void);
+void priority_yield(void);
 
 #endif /* threads/thread.h */

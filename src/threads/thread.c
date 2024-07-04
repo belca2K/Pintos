@@ -59,6 +59,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
+#define TIME_FREQ 100          /* # of timer ticks per second. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 /* If false (default), use round-robin scheduler.
@@ -99,7 +100,6 @@ thread_init (void)
 {
   ASSERT (intr_get_level () == INTR_OFF);
 
-  load_avg = 0; //(NOVO) inicializa load_avg
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init(&sleeping_list); //iniciando a lista adicionada
@@ -124,6 +124,7 @@ thread_start (void)
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
 
+  load_avg = 0; //(NOVO) inicializa a variável load_avg
   /* Start preemptive thread scheduling. */
   intr_enable ();
 
@@ -148,6 +149,24 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  if(thread_mlfqs)
+  { //(NOVO) verifica se o escalonamento é do tipo MLFQS
+    if(t!=idle_thread)
+    {
+      t->recent_cpu = FLOAT_ADD_MIX(t->recent_cpu, 1);
+    }
+    
+    if(timer_ticks() % TIME_FREQ == 0)//(NOVO) ocorre quando se passa um segundo
+    {
+      update_load_avg();
+      update_recent_all();
+    }
+
+    if(timer_ticks() % 4 == 0) //(NOVO) verifica se o valor do timer_ticks é múltipĺo de 4
+    {
+      update_priority_all();
+    }
+  }
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
@@ -177,8 +196,7 @@ thread_print_stats (void)
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
 tid_t
-thread_create (const char *name, int priority,
-               thread_func *function, void *aux) 
+thread_create (const char *name, int priority, thread_func *function, void *aux) 
 {
   struct thread *t;
   struct kernel_thread_frame *kf;
@@ -356,6 +374,12 @@ thread_set_priority (int new_priority)
   thread_current ()->priority = new_priority;
   thread_yield();    // (NOVO) Chama a função thread_yield para verificar se a
                      // thread atual tem prioridade maior que a thread criada.
+  if(!thread_mlfqs)
+  {
+    struct thread *t = thread_current(); 
+    t->priority = new_priority;
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
@@ -384,10 +408,16 @@ void
 thread_set_nice (int nice UNUSED) 
 {
   struct thread *t = thread_current();
+  
   t->nice = nice;
+  
   int priority = FLOAT_TO_INT_ZERO(FLOAT_ADD(FLOAT_DIV_MIX(t->recent_cpu,-4) ,INT_TO_FLOAT(PRI_MAX - (t->nice* 2))));
-    priority = priority_limit_check (priority); // Verifica se a prioridade está dentro do limite.
-    t->priority = priority_limit_check(priority); // Atribui o valor de priority para o atributo priority.
+  
+  priority = priority_limit_check (priority); // Verifica se a prioridade está dentro do limite.
+  
+  t->priority = priority_limit_check(priority); // Atribui o valor de priority para o atributo priority.
+
+  priority_yield();
 }
 
 /* Returns the current thread's nice value. */
@@ -704,6 +734,68 @@ priority_limit_check(int64_t priority)
     priority = PRI_MIN;
   }
   return priority;
+}
+
+//(NOVO)   atualiza a prioridade de todas as threads
+// priority = PRI_MAX - (recent_cpu/4) - (nice*2)
+void
+update_priority_all(void)
+{
+  struct list_elem *l = list_begin(&all_list);
+
+  while(l!=list_end(&all_list))
+  {
+    struct thread *cur = list_entry(l,struct thread, allelem);
+    l = list_next(l);
+
+    if(cur != idle_thread)
+    {
+      int priority = FLOAT_TO_INT_ZERO(FLOAT_ADD(FLOAT_DIV_MIX(cur->recent_cpu,-4) ,INT_TO_FLOAT(PRI_MAX - (cur->nice* 2))));
+    
+      cur->priority = priority_limit_check(priority);//verifica se a prioridade está dentro do limite
+    }
+  }
+}
+//(NOVO)  atualiza o tempo de cpu recente de todas as threads
+// recent_cpu = (2*load_avg)/(2*loag_avg+1)*recent_cpu + nice
+void 
+update_recent_all(void)
+{
+  struct list_elem *l = list_begin(&all_list);
+  
+  while(l != list_end(&all_list))
+  {
+    struct thread *cur = list_entry(l, struct thread, allelem);
+    l = list_next(l);
+
+    cur->recent_cpu = (FLOAT_ADD_MIX(FLOAT_MULT(FLOAT_DIV(FLOAT_MULT_MIX(load_avg, 2), 
+      FLOAT_ADD_MIX(FLOAT_MULT_MIX(load_avg, 2), 1)),  cur->recent_cpu),cur->nice));
+  }
+}
+//(NOVO)  atualiza a média de carga do sistema
+//  load_avg = (59/60)*load_avg + (1/60)*ready_threads
+void
+update_load_avg(void)
+{
+  int ready_threads = list_size(&ready_list);
+  if(thread_current() != idle_thread)
+    {ready_threads++;}
+
+    //atualização do load_avg
+    load_avg = (FLOAT_ADD(FLOAT_MULT(FLOAT_DIV_MIX(INT_TO_FLOAT(59), 60), load_avg), FLOAT_MULT_MIX(FLOAT_DIV_MIX(INT_TO_FLOAT(1), 60), ready_threads)));
+}
+
+//(NOVO)  função que realiza a preemção com base na prioridade
+void
+priority_yield(void)
+{
+  if(list_empty(&ready_list))
+    return;
+
+  struct thread *t = list_entry(list_front(&ready_list),struct thread, elem);
+  
+  if(thread_current()->priority < t->priority)
+    thread_yield();
 }
 
 

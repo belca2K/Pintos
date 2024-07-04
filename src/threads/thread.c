@@ -167,6 +167,7 @@ thread_tick (void)
       enum intr_level old_level;
       
       old_level = intr_disable();
+      // sortear para executar as threads em ordem de prioridade
       list_sort(&ready_list, unblock_ordenator, NULL);
       intr_set_level(old_level);
     }
@@ -657,7 +658,7 @@ allocate_tid (void)
   return tid;
 }
 
-/* Compara as threads com base no wakeup_ticks. Compara esses ticks
+/* (NOVO) Compara as threads com base no wakeup_ticks. Compara esses ticks
   para inserir ordenadamente as threads de acordo com seus wakeup_ticks.
   Retorna True caso o wakeup_tick de A seja menor que o wakeup_tick de B. */
 bool
@@ -676,7 +677,7 @@ bool unblock_ordenator(const struct list_elem *a, const struct list_elem *b, voi
   struct thread *tb = list_entry(b, struct thread, elem);
   return (ta->priority) > (tb->priority); 
 }
-/* Suspende a execução da thread até que o tick atual ser igual 
+/* (NOVO) Suspende a execução da thread até que o tick atual ser igual 
 ao wakeup_tick da thread. A thread é colocada na lista de threads suspensas(sleeping_list)
 ordenadamente de acordo com o wakeup_tick. */
 void
@@ -698,7 +699,7 @@ thread_sleep (int64_t wakeup_tick)
   intr_set_level (old_level);
 }
 
-/*  Acorda as threads que possuem wakeup_tick menor que o tick atual
+/*  (NOVO)Acorda as threads que possuem wakeup_tick menor que o tick atual
     e as move para a lista de threads prontas para execução (ready_list). Essa função
     é chamada periodicamente pelo tratador de interrupção (timer_interrupt_handler) */
 void
@@ -710,7 +711,7 @@ thread_wakeup (void)
   old_level = intr_disable ();
   while (e != list_end (&sleeping_list))
     {
-      struct thread *t = list_entry (e, struct thread, elem); //armazena o valor a ser analisado antes de pegar o próximo elemento
+      struct thread *t = list_entry (e, struct thread, elem); //(armazena o valor a ser analisado antes de pegar o próximo elemento
       e = list_next (e); //iterador do laço
 
       if (timer_ticks () < thread_get_wakeup_tick (t)) // se o timer_ticks for menor, sair do laço, pois, como a lista tá ordenada,
